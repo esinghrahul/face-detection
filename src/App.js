@@ -1,6 +1,5 @@
 import React from "react";
 import Particles from "react-particles-js";
-import Clarifai from 'clarifai'
 import "./App.css";
 import Navigation from "./components/navigation/navigation.component";
 import Logo from "./components/logo/logo.component";
@@ -10,9 +9,6 @@ import FaceDetection from "./components/face-detection/face-detection.component"
 import SignIn from "./components/signin/sign-in.component";
 import Register from "./components/register/register.component";
 
-const app = new Clarifai.App({
-  apiKey: 'ac0a06c8a8774551a61fd675c50137cb'
- });
 
 const PARTICLE_OPTIONS = {
   particles: {
@@ -25,16 +21,36 @@ const PARTICLE_OPTIONS = {
     },
   },
 };
+
+const INITIAL_STATE = {
+  input: '',
+  imageUrl: '',
+  box: {},
+  route: 'signin',
+  isSignedIn: false,
+  user: {
+    id: '',
+    name: '',
+    email: '',
+    entries: 0,
+    joined: ''
+  }
+}
+
 class App extends React.Component {
   constructor(){
     super()
-    this.state={
-      input: '',
-      imageUrl: '',
-      box: {},
-      route: 'signin',
-      isSignedIn: false
-    }
+    this.state= INITIAL_STATE
+  }
+
+  loadUser= (data)=> {
+    this.setState({user: {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      entries: data.entries,
+      joined: data.joined
+    }})
   }
 
   calculateFaceLocation = (data) => {
@@ -57,15 +73,36 @@ class App extends React.Component {
     this.setState({input: event.target.value})
   }
 
-  onSubmit = () => {
+  onPictureSubmit = () => {
     this.setState({imageUrl: this.state.input})
-    app.models.predict('e15d0f873e66047e579f90cf82c9882z', this.state.input)
-    .then((response) =>  this.displayFaceBox(this.calculateFaceLocation(response)))
+    fetch('https://face-detectionnow-api.herokuapp.com/imageUrl',{
+          method: 'post',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+              input: this.state.input
+          })
+      })
+    .then(response=> response.json())
+    .then((response) =>  {
+      if(response){
+        fetch('https://face-detectionnow-api.herokuapp.com/image',{
+          method: 'put',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+              id: this.state.user.id
+          })
+      })
+      .then(response => response.json())
+      .then(count=> {
+        this.setState(Object.assign(this.state.user, {entries: count}))
+      })
+    }
+      this.displayFaceBox(this.calculateFaceLocation(response))})
     .catch(err => console.log(err))
   }
   onRouteChange = (route) => {
     if(route === 'signout'){
-      this.setState({isSignedIn: false})
+      this.setState(INITIAL_STATE)
     } else if(route === 'home'){
       this.setState({isSignedIn: true})
     }
@@ -80,13 +117,13 @@ class App extends React.Component {
       {route === 'home' ? 
       (<>
         <Logo />
-        <Rank />
-        <ImageForm onSubmit = {this.onSubmit} onInputChange = {this.onInputChange} />
+        <Rank name={this.state.user.name} entries= {this.state.user.entries} />
+        <ImageForm onSubmit = {this.onPictureSubmit} onInputChange = {this.onInputChange} />
         <FaceDetection imageUrl = {imageUrl} box = {box}/>
         </>) :
       (route === 'signin'? 
-      <SignIn onRouteChange ={this.onRouteChange} /> :
-      <Register onRouteChange ={this.onRouteChange} />
+      <SignIn onRouteChange ={this.onRouteChange} loadUser= {this.loadUser} /> :
+      <Register onRouteChange ={this.onRouteChange} loadUser = {this.loadUser}/>
       )
       
       }
